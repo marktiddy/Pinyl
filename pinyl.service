@@ -1,0 +1,14 @@
+[Unit]
+Description=Pinyl - Turntable AirPlay Streamer
+After=network.target sound.target avahi-daemon.service
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/pinyl/app.py
+WorkingDirectory=/opt/pinyl
+Restart=always
+RestartSec=5
+User=mark
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
