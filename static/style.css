@@ -379,8 +379,27 @@ input[type="range"] {
 }
 
 .pt-8 {
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+  padding-top: 2rem;
+}
+
+.pb-6 {
+  padding-bottom: 1.5rem;
+}
+
+.flex {
+  display: flex;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-3 {
+  gap: 0.75rem;
 }
 
 /* ── Header status text ── */
