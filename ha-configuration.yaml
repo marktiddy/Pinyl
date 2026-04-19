@@ -4,14 +4,14 @@
 switch:
   - platform: rest
     name: Turntable
-    resource: http://192.168.68.108:5000
-    state_resource: http://192.168.68.108:5000/api/status
-    body_on: '{}'
-    body_off: '{}'
-    command_on: http://192.168.68.108:5000/on
-    command_off: http://192.168.68.108:5000/off
+    resource: http://192.168.68.108:5050
+    state_resource: http://192.168.68.108:5050/api/status
+    body_on: "{}"
+    body_off: "{}"
+    command_on: http://192.168.68.108:5050/on
+    command_off: http://192.168.68.108:5050/off
     headers:
       Content-Type: application/json
-    value_template: '{{ value_json.streaming }}'
+    value_template: "{{ value_json.streaming }}"
     method: post
     scan_interval: 10

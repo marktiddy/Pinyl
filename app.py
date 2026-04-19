@@ -2,13 +2,15 @@
 """
 Pinyl - Turntable to AirPlay streamer
 Streams audio from an analog input (e.g. iRig Pro Duo) to AirPlay speakers
+via pyatv RAOP protocol.
 """
 
 import asyncio
+import asyncio.subprocess as asp
 import subprocess
 import threading
-import json
 import logging
+import os
 from flask import Flask, jsonify, render_template, request
 import pyatv
 import pyatv.const
@@ -18,19 +20,46 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- State ---
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
 state = {
     "streaming": False,
-    "speakers": [],         # discovered AirPlay speakers
-    "active_speakers": [],  # currently streaming to
-    "input_device": None,   # selected ALSA capture device
-    "inputs": [],           # discovered ALSA inputs
+    "speakers": [],
+    "active_speakers": [],
+    "input_device": None,
+    "inputs": [],
     "volume": 50,
     "error": None,
 }
 
-stream_process = None
+stream_tasks = {}  # device_id -> asyncio.Task
 stream_lock = threading.Lock()
+
+# Single shared event loop running in background thread
+loop = asyncio.new_event_loop()
+
+def run_loop():
+    loop.run_forever()
+
+loop_thread = threading.Thread(target=run_loop, daemon=True)
+loop_thread.start()
+
+
+def run_async(coro, timeout=30):
+    """Run a coroutine in the background event loop and wait for result."""
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=timeout)
+
+
+def credentials_path(device_id):
+    base = os.path.expanduser("~/.config/pinyl")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, f"{device_id.replace(':', '_')}.creds")
+
+
+def is_paired(device_id):
+    return os.path.exists(credentials_path(device_id))
 
 
 # ---------------------------------------------------------------------------
@@ -38,12 +67,8 @@ stream_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 
 def discover_inputs():
-    """Discover ALSA capture devices."""
     try:
-        result = subprocess.run(
-            ["arecord", "-l"],
-            capture_output=True, text=True
-        )
+        result = subprocess.run(["arecord", "-l"], capture_output=True, text=True)
         inputs = []
         for line in result.stdout.splitlines():
             if line.startswith("card "):
@@ -66,140 +91,192 @@ def discover_inputs():
 # ---------------------------------------------------------------------------
 
 async def _discover_airplay():
-    """Async AirPlay discovery using pyatv."""
     try:
-        devices = await pyatv.scan(asyncio.get_event_loop(), timeout=10)
+        devices = await pyatv.scan(loop, timeout=10)
         speakers = []
         for device in devices:
-            if pyatv.const.Protocol.AirPlay in [s.protocol for s in device.services]:
+            services = [s.protocol for s in device.services]
+            if pyatv.const.Protocol.RAOP in services:
                 speakers.append({
                     "id": str(device.identifier),
                     "name": device.name,
                     "address": str(device.address),
+                    "paired": is_paired(str(device.identifier)),
                 })
         state["speakers"] = speakers
         logger.info(f"Discovered speakers: {speakers}")
     except Exception as e:
-        logger.error(f"Error discovering AirPlay speakers: {e}")
+        logger.error(f"Error discovering speakers: {e}")
         state["speakers"] = []
 
 
 def discover_speakers():
-    """Run AirPlay discovery in a thread."""
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(_discover_airplay())
-    loop.close()
+    run_async(_discover_airplay())
+
+
+# ---------------------------------------------------------------------------
+# Pairing
+# ---------------------------------------------------------------------------
+
+_pairing_handlers = {}
+
+
+async def _start_pairing(device_id, protocol_str):
+    try:
+        devices = await pyatv.scan(loop, timeout=10, identifier=device_id)
+        if not devices:
+            return {"error": f"Device {device_id} not found on network"}
+
+        device = devices[0]
+        protocol = (
+            pyatv.const.Protocol.RAOP
+            if protocol_str == "raop"
+            else pyatv.const.Protocol.AirPlay
+        )
+
+        pairing = await pyatv.pair(device, protocol, loop)
+        await pairing.begin()
+
+        _pairing_handlers[device_id] = pairing
+        logger.info(f"Pairing started for {device.name} via {protocol_str}")
+        return {"status": "awaiting_pin", "device_name": device.name}
+
+    except Exception as e:
+        logger.error(f"Pairing start error: {e}")
+        return {"error": str(e)}
+
+
+async def _finish_pairing(device_id, pin):
+    try:
+        pairing = _pairing_handlers.get(device_id)
+        if not pairing:
+            return {"error": "No active pairing session — please start pairing again"}
+
+        pairing.pin(int(pin))
+        await pairing.finish()
+
+        if pairing.has_paired:
+            # Persist credentials
+            creds = pairing.service.credentials
+            with open(credentials_path(device_id), "w") as f:
+                f.write(str(creds))
+
+            await pairing.close()
+            del _pairing_handlers[device_id]
+
+            # Update in-memory speaker list
+            for sp in state["speakers"]:
+                if sp["id"] == device_id:
+                    sp["paired"] = True
+
+            logger.info(f"Pairing successful for {device_id}")
+            return {"status": "paired"}
+        else:
+            await pairing.close()
+            return {"error": "Pairing failed — check the PIN and try again"}
+
+    except Exception as e:
+        logger.error(f"Pairing finish error: {e}")
+        return {"error": str(e)}
 
 
 # ---------------------------------------------------------------------------
 # Streaming
 # ---------------------------------------------------------------------------
 
-def get_sample_format(device):
-    """Probe the device for supported sample format."""
-    result = subprocess.run(
-        ["arecord", "-D", device, "--dump-hw-params"],
-        capture_output=True, text=True, timeout=3
-    )
-    output = result.stderr + result.stdout
-    if "S24_3LE" in output:
-        return "S24_3LE"
-    return "cd"  # fallback to 16-bit CD quality
+async def _stream_to_speaker(device_id, input_device):
+    atv = None
+    process = None
+    try:
+        devices = await pyatv.scan(loop, timeout=10, identifier=device_id)
+        if not devices:
+            raise Exception(f"Speaker {device_id} not found")
 
+        device = devices[0]
 
-def build_ffmpeg_cmd(input_device, sample_fmt):
-    """Build the ffmpeg capture command."""
-    if sample_fmt == "S24_3LE":
-        return [
-            "ffmpeg", "-y",
-            "-f", "alsa",
-            "-i", input_device,
-            "-ar", "44100",
-            "-ac", "2",
-            "-f", "s16le",
-            "-acodec", "pcm_s16le",
-            "pipe:1"
-        ]
-    else:
-        return [
-            "ffmpeg", "-y",
-            "-f", "alsa",
-            "-f", "cd",
-            "-i", input_device,
-            "-f", "s16le",
-            "pipe:1"
-        ]
+        creds_file = credentials_path(device_id)
+        if os.path.exists(creds_file):
+            with open(creds_file) as f:
+                creds = f.read().strip()
+            for service in device.services:
+                if service.protocol == pyatv.const.Protocol.RAOP:
+                    service.credentials = creds
 
-
-def start_stream(input_device, speaker_addresses, volume):
-    """Start the ffmpeg → shairport-sync stream."""
-    global stream_process
-
-    with stream_lock:
-        if state["streaming"]:
-            stop_stream()
+        atv = await pyatv.connect(device, loop)
+        logger.info(f"Connected to {device.name}")
 
         try:
-            sample_fmt = get_sample_format(input_device)
-            ffmpeg_cmd = build_ffmpeg_cmd(input_device, sample_fmt)
+            await atv.audio.set_volume(state["volume"])
+        except Exception:
+            pass
 
-            # Use shairport-sync piped mode targeting first speaker
-            # Multi-speaker support via multiple shairport-sync instances
-            shairport_cmd = [
-                "shairport-sync",
-                "--output=stdout",
-                "--name=Pinyl",
-            ]
+        process = await asp.create_subprocess_exec(
+            "ffmpeg", "-y",
+            "-f", "alsa", "-i", input_device,
+            "-f", "mp3", "-acodec", "libmp3lame", "-ar", "44100", "-ac", "2",
+            "-",
+            stdin=None, stdout=asp.PIPE, stderr=asp.DEVNULL,
+        )
 
-            logger.info(f"Starting stream: {ffmpeg_cmd}")
-            ffmpeg_proc = subprocess.Popen(
-                ffmpeg_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-            )
+        await atv.stream.stream_file(process.stdout)
 
-            shairport_proc = subprocess.Popen(
-                shairport_cmd,
-                stdin=ffmpeg_proc.stdout,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-
-            stream_process = (ffmpeg_proc, shairport_proc)
-            state["streaming"] = True
-            state["active_speakers"] = speaker_addresses
-            state["error"] = None
-            logger.info("Stream started successfully")
-
-        except Exception as e:
-            logger.error(f"Error starting stream: {e}")
-            state["error"] = str(e)
-            state["streaming"] = False
-
-
-def stop_stream():
-    """Stop all stream processes."""
-    global stream_process
-
-    with stream_lock:
-        if stream_process:
-            ffmpeg_proc, shairport_proc = stream_process
+    except asyncio.CancelledError:
+        logger.info(f"Stream cancelled for {device_id}")
+    except Exception as e:
+        logger.error(f"Stream error for {device_id}: {e}")
+        state["error"] = str(e)
+    finally:
+        if process and process.returncode is None:
             try:
-                shairport_proc.terminate()
-                ffmpeg_proc.terminate()
-                shairport_proc.wait(timeout=5)
-                ffmpeg_proc.wait(timeout=5)
-            except Exception as e:
-                logger.error(f"Error stopping stream: {e}")
-            stream_process = None
+                process.terminate()
+                await asyncio.wait_for(process.wait(), timeout=3)
+            except Exception:
+                pass
+        if atv:
+            try:
+                await atv.close()
+            except Exception:
+                pass
+        stream_tasks.pop(device_id, None)
 
-        state["streaming"] = False
-        state["active_speakers"] = []
-        logger.info("Stream stopped")
+
+async def _stop_all_streams():
+    tasks = list(stream_tasks.values())
+    stream_tasks.clear()
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def start_stream(input_device, speaker_ids, volume):
+    with stream_lock:
+        run_async(_stop_all_streams(), timeout=10)
+
+    state["error"] = None
+    state["streaming"] = True
+    state["active_speakers"] = list(speaker_ids)
+    state["volume"] = volume
+
+    async def _launch():
+        for device_id in speaker_ids:
+            task = asyncio.ensure_future(_stream_to_speaker(device_id, input_device))
+            stream_tasks[device_id] = task
+
+    run_async(_launch(), timeout=5)
+    logger.info(f"Stream started → {speaker_ids}")
+
+
+def _stop_stream():
+    run_async(_stop_all_streams(), timeout=10)
+    state["streaming"] = False
+    state["active_speakers"] = []
+    logger.info("Stream stopped")
 
 
 # ---------------------------------------------------------------------------
-# Routes - Web UI
+# Routes — Web UI
 # ---------------------------------------------------------------------------
 
 @app.route("/")
@@ -209,7 +286,7 @@ def index():
 
 
 # ---------------------------------------------------------------------------
-# Routes - REST API
+# Routes — REST API
 # ---------------------------------------------------------------------------
 
 @app.route("/api/status", methods=["GET"])
@@ -220,6 +297,7 @@ def api_status():
         "input_device": state["input_device"],
         "volume": state["volume"],
         "error": state["error"],
+        "speakers": state["speakers"],
     })
 
 
@@ -237,56 +315,76 @@ def api_discover_inputs():
     return jsonify({"inputs": state["inputs"]})
 
 
+@app.route("/api/pair/start", methods=["POST"])
+def api_pair_start():
+    data = request.json or {}
+    device_id = data.get("device_id")
+    protocol = data.get("protocol", "raop")
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    result = run_async(_start_pairing(device_id, protocol))
+    return jsonify(result)
+
+
+@app.route("/api/pair/finish", methods=["POST"])
+def api_pair_finish():
+    data = request.json or {}
+    device_id = data.get("device_id")
+    pin = data.get("pin")
+    if not device_id or pin is None:
+        return jsonify({"error": "device_id and pin required"}), 400
+    result = run_async(_finish_pairing(device_id, pin))
+    return jsonify(result)
+
+
 @app.route("/api/stream/start", methods=["POST"])
 def api_stream_start():
     data = request.json or {}
     input_device = data.get("input_device", state["input_device"])
-    speaker_addresses = data.get("speakers", state["active_speakers"])
-    volume = data.get("volume", state["volume"])
+    speaker_ids = data.get("speakers", [])
+    volume = int(data.get("volume", state["volume"]))
 
     if not input_device:
         return jsonify({"error": "No input device selected"}), 400
+    if not speaker_ids:
+        return jsonify({"error": "No speakers selected"}), 400
 
-    state["input_device"] = input_device
-    state["volume"] = volume
-
-    t = threading.Thread(target=start_stream, args=(input_device, speaker_addresses, volume))
+    t = threading.Thread(target=start_stream, args=(input_device, speaker_ids, volume))
     t.start()
-    t.join(timeout=10)
 
-    return jsonify({"streaming": state["streaming"], "error": state["error"]})
+    return jsonify({"streaming": True})
 
 
 @app.route("/api/stream/stop", methods=["POST"])
 def api_stream_stop():
-    stop_stream()
+    _stop_stream()
     return jsonify({"streaming": False})
 
 
 @app.route("/api/volume", methods=["POST"])
 def api_volume():
     data = request.json or {}
-    volume = data.get("volume", 50)
+    volume = int(data.get("volume", 50))
     state["volume"] = volume
-    # TODO: pipe volume to shairport-sync via DACP/DBUS when implemented
     return jsonify({"volume": volume})
 
 
-# Home Assistant compatibility endpoints
+# Home Assistant compatibility
 @app.route("/on", methods=["POST"])
 def ha_on():
-    t = threading.Thread(
-        target=start_stream,
-        args=(state["input_device"], state["active_speakers"], state["volume"])
-    )
-    t.start()
-    t.join(timeout=10)
+    if state["input_device"] and state["active_speakers"]:
+        t = threading.Thread(
+            target=start_stream,
+            args=(state["input_device"], state["active_speakers"], state["volume"])
+        )
+        t.start()
     return jsonify({"state": "on" if state["streaming"] else "off"})
 
 
 @app.route("/off", methods=["POST"])
 def ha_off():
-    stop_stream()
+    with stream_lock:
+        _stop_stream()
     return jsonify({"state": "off"})
 
 
@@ -295,8 +393,9 @@ def ha_off():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    os.makedirs(os.path.expanduser("~/.config/pinyl"), exist_ok=True)
     logger.info("Starting Pinyl...")
     discover_inputs()
     t = threading.Thread(target=discover_speakers)
     t.start()
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5050, debug=False)

@@ -76,10 +76,10 @@ sudo systemctl start pinyl
 Navigate to:
 
 ```
-http://<your-pi-ip>:5000
+http://<your-pi-ip>:5050
 ```
 
-e.g. `http://192.168.68.108:5000`
+e.g. `http://192.168.68.108:5050`
 
 ---
 
@@ -96,21 +96,21 @@ e.g. `http://192.168.68.108:5000`
 
 ## REST API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/status` | Current stream status |
-| POST | `/api/stream/start` | Start streaming |
-| POST | `/api/stream/stop` | Stop streaming |
-| POST | `/api/discover/speakers` | Scan for AirPlay speakers |
-| POST | `/api/discover/inputs` | Scan for audio inputs |
-| POST | `/api/volume` | Set volume `{"volume": 0-100}` |
-| POST | `/on` | Home Assistant on toggle |
-| POST | `/off` | Home Assistant off toggle |
+| Method | Endpoint                 | Description                    |
+| ------ | ------------------------ | ------------------------------ |
+| GET    | `/api/status`            | Current stream status          |
+| POST   | `/api/stream/start`      | Start streaming                |
+| POST   | `/api/stream/stop`       | Stop streaming                 |
+| POST   | `/api/discover/speakers` | Scan for AirPlay speakers      |
+| POST   | `/api/discover/inputs`   | Scan for audio inputs          |
+| POST   | `/api/volume`            | Set volume `{"volume": 0-100}` |
+| POST   | `/on`                    | Home Assistant on toggle       |
+| POST   | `/off`                   | Home Assistant off toggle      |
 
 ### Example: start stream via curl
 
 ```bash
-curl -X POST http://192.168.68.108:5000/api/stream/start \
+curl -X POST http://192.168.68.108:5050/api/stream/start \
   -H "Content-Type: application/json" \
   -d '{"input_device": "hw:2,0", "speakers": ["Office"], "volume": 70}'
 ```
