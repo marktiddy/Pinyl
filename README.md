@@ -21,7 +21,6 @@ Pinyl captures audio from a USB audio interface, converts it, and streams it to 
 - Raspberry Pi OS (Lite or Full, 64-bit)
 - Python 3.9+
 - ffmpeg
-- shairport-sync
 - avahi-daemon
 
 ---
@@ -32,7 +31,7 @@ Pinyl captures audio from a USB audio interface, converts it, and streams it to 
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y ffmpeg shairport-sync avahi-daemon avahi-utils python3-pip
+sudo apt install -y ffmpeg avahi-daemon avahi-utils python3-pip
 ```
 
 ### 2. Clone the repo
@@ -112,8 +111,10 @@ e.g. `http://192.168.68.108:5050`
 ```bash
 curl -X POST http://192.168.68.108:5050/api/stream/start \
   -H "Content-Type: application/json" \
-  -d '{"input_device": "hw:2,0", "speakers": ["Office"], "volume": 70}'
+  -d '{"input_device": "plughw:2,0", "speakers": ["<device-id>"], "volume": 70}'
 ```
+
+Device IDs are returned by `GET /api/status` or `POST /api/discover/speakers`.
 
 ---
 
@@ -128,8 +129,8 @@ Copy the contents of `ha-configuration.yaml` into your Home Assistant `configura
 **No audio devices found**
 Run `arecord -l` to confirm your interface is detected. Try a different USB port or powered hub.
 
-**Sample format error**
-Run `arecord -D hw:X,0 --dump-hw-params` (replace X with your card number) to see supported formats. Pinyl auto-detects S24_3LE and falls back to CD (16-bit).
+**ffmpeg exits immediately**
+Check the Pinyl logs (`sudo journalctl -u pinyl -f`) for the ffmpeg error output. Run `arecord -D plughw:X,0 -f S16_LE -r 48000 -c 2 /tmp/test.wav` (replace X with your card number) to confirm the device records correctly outside of Pinyl.
 
 **No AirPlay speakers found**
 Ensure your Pi and speakers are on the same Wi-Fi network. Run `avahi-browse -a | grep AirPlay` to check.
@@ -141,9 +142,10 @@ Check logs with `sudo journalctl -u pinyl -f`
 
 ## Notes
 
-- AirPlay streams at 44,100 Hz / 16-bit (ALAC) regardless of input format — this is an AirPlay protocol limitation
-- The iRig Pro Duo outputs S24_3LE; Pinyl handles the conversion via ffmpeg automatically
-- Volume control via the UI sets the Pi-side gain; speaker volume is controlled independently on the device
+- Audio is captured at 48 kHz stereo and streamed as FLAC (compression level 0) via the RAOP protocol
+- ffmpeg applies a 4× input gain boost to compensate for the low output level of phono preamps — adjust the `volume=4.0` filter in `app.py` if your input is too loud or too quiet
+- Volume control via the UI adjusts the AirPlay receiver volume; the ffmpeg gain is a separate fixed boost
+- Audio device IDs use the `plughw:X,0` format, which allows ALSA to handle sample-rate conversion automatically
 
 ---
 
