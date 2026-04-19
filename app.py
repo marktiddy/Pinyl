@@ -6,7 +6,6 @@ via pyatv RAOP protocol.
 """
 
 import asyncio
-import asyncio.subprocess as asp
 import subprocess
 import threading
 import logging
@@ -18,7 +17,7 @@ import pyatv.const
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path="", static_folder="static")
 
 # ---------------------------------------------------------------------------
 # State
@@ -34,6 +33,7 @@ state = {
 }
 
 stream_tasks = {}  # device_id -> asyncio.Task
+stream_atvs = {}   # device_id -> active atv connection
 stream_lock = threading.Lock()
 
 # Single shared event loop running in background thread
@@ -75,7 +75,7 @@ def discover_inputs():
                 parts = line.split(":")
                 card_num = parts[0].replace("card ", "").strip()
                 name = parts[1].split("[")[1].split("]")[0].strip() if "[" in parts[1] else parts[1].strip()
-                device = f"hw:{card_num},0"
+                device = f"plughw:{card_num},0"
                 inputs.append({"id": device, "name": name, "card": card_num})
         state["inputs"] = inputs
         if inputs and not state["input_device"]:
@@ -192,18 +192,10 @@ async def _finish_pairing(device_id, pin):
 # Streaming
 # ---------------------------------------------------------------------------
 
-async def _drain_stderr(stderr, label):
-    while True:
-        line = await stderr.readline()
-        if not line:
-            break
-        logger.debug("ffmpeg[%s]: %s", label, line.decode(errors="replace").rstrip())
-
-
 async def _stream_to_speaker(device_id, input_device):
     atv = None
     process = None
-    stderr_task = None
+    reader = None
     try:
         devices = await pyatv.scan(loop, timeout=10, identifier=device_id)
         if not devices:
@@ -220,23 +212,46 @@ async def _stream_to_speaker(device_id, input_device):
                     service.credentials = creds
 
         atv = await pyatv.connect(device, loop)
+        stream_atvs[device_id] = atv
         logger.info(f"Connected to {device.name}")
 
         try:
-            await atv.audio.set_volume(state["volume"])
+            state["volume"] = int(atv.audio.volume)
         except Exception:
             pass
 
-        process = await asp.create_subprocess_exec(
-            "ffmpeg", "-y",
-            "-f", "alsa", "-i", input_device,
-            "-f", "flac", "-ar", "44100", "-ac", "2",
-            "-",
-            stdin=None, stdout=asp.PIPE, stderr=asp.PIPE,
+        # OS pipe → pyatv gets a plain blocking BufferedReader (BufferedIOBaseWrapper path),
+        # not asyncio StreamReader, avoiding the run_coroutine_threadsafe deadlock.
+        # WAV: always built into ffmpeg, no external codec needed, header written immediately.
+        read_fd, write_fd = os.pipe()
+        process = subprocess.Popen(
+            ["ffmpeg", "-y",
+            "-f", "alsa", "-ac", "2", "-ar", "48000",
+            "-i", input_device,
+            "-af", "volume=4.0",
+            "-ar", "48000",
+            "-ac", "2",
+            "-f", "flac",
+            "-compression_level", "0",
+            "-"],
+            stdout=write_fd,
+            stderr=subprocess.PIPE,
         )
-        stderr_task = asyncio.ensure_future(_drain_stderr(process.stderr, device_id[:8]))
+        os.close(write_fd)
+        reader = os.fdopen(read_fd, "rb")
 
-        await atv.stream.stream_file(process.stdout)
+        # Drain ffmpeg stderr in background; log at WARNING so errors are always visible.
+        def _log_ffmpeg():
+            for line in process.stderr:
+                logger.warning("ffmpeg: %s", line.decode(errors="replace").rstrip())
+        threading.Thread(target=_log_ffmpeg, daemon=True).start()
+
+        # Give ffmpeg a moment and fail fast if it exits immediately (bad device / codec).
+        await asyncio.sleep(0.3)
+        if process.poll() is not None:
+            raise Exception(f"ffmpeg exited immediately (code {process.returncode}) — see ffmpeg output above")
+
+        await atv.stream.stream_file(reader)
 
     except asyncio.CancelledError:
         logger.info(f"Stream cancelled for {device_id}")
@@ -244,12 +259,15 @@ async def _stream_to_speaker(device_id, input_device):
         logger.error(f"Stream error for {device_id}: {e}")
         state["error"] = str(e)
     finally:
-        if stderr_task:
-            stderr_task.cancel()
-        if process and process.returncode is None:
+        if process:
             try:
                 process.terminate()
-                await asyncio.wait_for(process.wait(), timeout=3)
+                process.wait(timeout=3)
+            except Exception:
+                pass
+        if reader:
+            try:
+                reader.close()
             except Exception:
                 pass
         if atv:
@@ -258,6 +276,7 @@ async def _stream_to_speaker(device_id, input_device):
             except Exception:
                 pass
         stream_tasks.pop(device_id, None)
+        stream_atvs.pop(device_id, None)
 
 
 async def _stop_all_streams():
@@ -311,6 +330,12 @@ def index():
 
 @app.route("/api/status", methods=["GET"])
 def api_status():
+    for atv in stream_atvs.values():
+        try:
+            state["volume"] = int(atv.audio.volume)
+        except Exception:
+            pass
+        break
     return jsonify({
         "streaming": state["streaming"],
         "active_speakers": state["active_speakers"],
@@ -386,6 +411,17 @@ def api_volume():
     data = request.json or {}
     volume = int(data.get("volume", 50))
     state["volume"] = volume
+
+    async def _apply():
+        for atv in list(stream_atvs.values()):
+            try:
+                await atv.audio.set_volume(volume)
+            except Exception:
+                pass
+
+    if stream_atvs:
+        run_async(_apply(), timeout=5)
+
     return jsonify({"volume": volume})
 
 
