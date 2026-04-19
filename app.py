@@ -97,11 +97,19 @@ async def _discover_airplay():
         for device in devices:
             services = [s.protocol for s in device.services]
             if pyatv.const.Protocol.RAOP in services:
+                raop_service = next(
+                    s for s in device.services
+                    if s.protocol == pyatv.const.Protocol.RAOP
+                )
+                requires_pairing = (
+                    raop_service.pairing == pyatv.const.PairingRequirement.Mandatory
+                )
                 speakers.append({
                     "id": str(device.identifier),
                     "name": device.name,
                     "address": str(device.address),
                     "paired": is_paired(str(device.identifier)),
+                    "requires_pairing": requires_pairing,
                 })
         state["speakers"] = speakers
         logger.info(f"Discovered speakers: {speakers}")
@@ -184,9 +192,18 @@ async def _finish_pairing(device_id, pin):
 # Streaming
 # ---------------------------------------------------------------------------
 
+async def _drain_stderr(stderr, label):
+    while True:
+        line = await stderr.readline()
+        if not line:
+            break
+        logger.debug("ffmpeg[%s]: %s", label, line.decode(errors="replace").rstrip())
+
+
 async def _stream_to_speaker(device_id, input_device):
     atv = None
     process = None
+    stderr_task = None
     try:
         devices = await pyatv.scan(loop, timeout=10, identifier=device_id)
         if not devices:
@@ -213,10 +230,11 @@ async def _stream_to_speaker(device_id, input_device):
         process = await asp.create_subprocess_exec(
             "ffmpeg", "-y",
             "-f", "alsa", "-i", input_device,
-            "-f", "mp3", "-acodec", "libmp3lame", "-ar", "44100", "-ac", "2",
+            "-f", "flac", "-ar", "44100", "-ac", "2",
             "-",
-            stdin=None, stdout=asp.PIPE, stderr=asp.DEVNULL,
+            stdin=None, stdout=asp.PIPE, stderr=asp.PIPE,
         )
+        stderr_task = asyncio.ensure_future(_drain_stderr(process.stderr, device_id[:8]))
 
         await atv.stream.stream_file(process.stdout)
 
@@ -226,6 +244,8 @@ async def _stream_to_speaker(device_id, input_device):
         logger.error(f"Stream error for {device_id}: {e}")
         state["error"] = str(e)
     finally:
+        if stderr_task:
+            stderr_task.cancel()
         if process and process.returncode is None:
             try:
                 process.terminate()

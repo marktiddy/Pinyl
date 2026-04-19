@@ -1,659 +1,898 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pinyl</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Playfair+Display:wght@400;700;900&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --groove: #1a1a1a;
-      --wax: #111111;
-      --label: #c8a96e;
-      --label-dark: #8c6f3f;
-      --cream: #f0e6d0;
-      --dim: #4a4a4a;
-      --red: #c0392b;
-      --green: #27ae60;
-      --blue: #2980b9;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: var(--wax);
-      color: var(--cream);
-      font-family: 'DM Mono', monospace;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes pulse-ring {
-      0% { transform: scale(1); opacity: 0.6; }
-      100% { transform: scale(1.4); opacity: 0; }
-    }
-
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateY(-8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .vinyl {
-      width: 200px;
-      height: 200px;
-      border-radius: 50%;
-      background:
-        radial-gradient(circle at 50% 50%, #2a2a2a 0%, #1a1a1a 20%, #111 20.5%, #1a1a1a 21%, #111 30%, #1a1a1a 30.5%, #111 40%, #1a1a1a 40.5%, #111 50%, #1a1a1a 50.5%, #111 60%, #1a1a1a 60.5%, #0a0a0a 100%);
-      box-shadow: 0 0 60px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.5);
-      position: relative;
-      flex-shrink: 0;
-    }
-
-    .vinyl.playing { animation: spin 3s linear infinite; }
-
-    .vinyl-label {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 72px; height: 72px;
-      border-radius: 50%;
-      background: radial-gradient(circle at 40% 40%, var(--label), var(--label-dark));
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
-    }
-
-    .vinyl-label-text {
-      font-family: 'Playfair Display', serif;
-      font-size: 11px; font-weight: 700;
-      color: var(--wax);
-      letter-spacing: 0.05em;
-      text-align: center; line-height: 1.1;
-    }
-
-    .vinyl-hole {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--wax);
-    }
-
-    .pulse-ring {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 200px; height: 200px;
-      border-radius: 50%;
-      border: 2px solid var(--label);
-      animation: pulse-ring 2s ease-out infinite;
-      pointer-events: none;
-    }
-
-    .status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-      margin-right: 6px;
-    }
-    .status-dot.on  { background: var(--green); box-shadow: 0 0 8px var(--green); }
-    .status-dot.off { background: var(--dim); }
-    .status-dot.error { background: var(--red); box-shadow: 0 0 8px var(--red); }
-
-    .card {
-      background: #1c1c1c;
-      border: 1px solid #2a2a2a;
-      border-radius: 2px;
-      animation: fadeIn 0.4s ease both;
-    }
-
-    .btn {
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      border: none;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      padding: 10px 20px;
-      border-radius: 2px;
-    }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    .btn-primary { background: var(--label); color: var(--wax); font-weight: 500; }
-    .btn-primary:hover:not(:disabled) { background: #d4b87a; transform: translateY(-1px); }
-
-    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
-    .btn-danger:hover:not(:disabled) { background: var(--red); color: white; }
-
-    .btn-ghost { background: transparent; color: var(--dim); border: 1px solid #2a2a2a; }
-    .btn-ghost:hover:not(:disabled) { border-color: var(--label); color: var(--label); }
-
-    .btn-pair { background: transparent; color: var(--blue); border: 1px solid var(--blue); font-size: 10px; padding: 4px 10px; }
-    .btn-pair:hover:not(:disabled) { background: var(--blue); color: white; }
-
-    .btn-paired { background: transparent; color: var(--green); border: 1px solid var(--green); font-size: 10px; padding: 4px 10px; cursor: default; }
-
-    .speaker-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      border: 1px solid #2a2a2a;
-      border-radius: 2px;
-      background: #161616;
-      transition: all 0.15s ease;
-      gap: 12px;
-    }
-    .speaker-card:hover { border-color: #333; }
-    .speaker-card.selected { border-color: var(--label); background: rgba(200,169,110,0.06); }
-    .speaker-card.active-stream { border-color: var(--green); background: rgba(39,174,96,0.06); }
-
-    .speaker-name {
-      font-size: 12px;
-      letter-spacing: 0.04em;
-      cursor: pointer;
-      flex: 1;
-    }
-
-    /* Pairing PIN modal */
-    .pin-row {
-      animation: slideDown 0.2s ease;
-      background: #141414;
-      border-top: 1px solid #2a2a2a;
-      padding: 10px 14px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .pin-input {
-      font-family: 'DM Mono', monospace;
-      font-size: 14px;
-      letter-spacing: 0.3em;
-      background: #1c1c1c;
-      border: 1px solid var(--blue);
-      color: var(--cream);
-      border-radius: 2px;
-      padding: 6px 10px;
-      width: 90px;
-      outline: none;
-      text-align: center;
-    }
-
-    .pin-hint {
-      font-size: 10px;
-      color: var(--dim);
-      letter-spacing: 0.05em;
-    }
-
-    select {
-      font-family: 'DM Mono', monospace;
-      font-size: 12px;
-      background: #161616;
-      border: 1px solid #2a2a2a;
-      color: var(--cream);
-      border-radius: 2px;
-      padding: 8px 12px;
-      width: 100%;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    select:focus, select:hover { border-color: var(--label); }
-
-    input[type="range"] {
-      padding: 0; height: 4px;
-      appearance: none;
-      cursor: pointer;
-      accent-color: var(--label);
-      width: 100%;
-      background: transparent;
-    }
-
-    .label-text {
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--dim);
-      margin-bottom: 8px;
-    }
-
-    .mono-large {
-      font-family: 'Playfair Display', serif;
-      font-size: 42px; font-weight: 900;
-      letter-spacing: -0.02em;
-      color: var(--cream);
-    }
-
-    .section-title {
-      font-size: 10px;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--dim);
-      border-bottom: 1px solid #222;
-      padding-bottom: 10px;
-      margin-bottom: 16px;
-    }
-
-    .toast {
-      position: fixed;
-      bottom: 24px; right: 24px;
-      padding: 12px 20px;
-      background: #222;
-      border: 1px solid var(--label);
-      border-radius: 2px;
-      font-size: 12px;
-      letter-spacing: 0.05em;
-      opacity: 0;
-      transform: translateY(10px);
-      transition: all 0.3s ease;
-      pointer-events: none;
-      z-index: 100;
-    }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .toast.error { border-color: var(--red); color: var(--red); }
-    .toast.success { border-color: var(--green); color: var(--green); }
-
-    .groove-line {
-      height: 1px;
-      background: linear-gradient(to right, transparent, #2a2a2a 20%, #2a2a2a 80%, transparent);
-      margin: 24px 0;
-    }
-
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: var(--wax); }
-    ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
-  </style>
-</head>
-<body>
-
-  <div id="toast" class="toast"></div>
-
-  <!-- Header -->
-  <header class="px-8 pt-8 pb-6 flex items-center justify-between border-b border-[#1e1e1e]">
-    <div>
-      <div class="mono-large">Pinyl</div>
-      <div class="text-xs tracking-widest text-[#4a4a4a] mt-1">Turntable → AirPlay</div>
-    </div>
-    <div class="flex items-center gap-3">
-      <span class="status-dot" id="statusDot"></span>
-      <span class="text-xs tracking-wider" id="statusText">Idle</span>
-    </div>
-  </header>
-
-  <main class="max-w-3xl mx-auto px-8 py-8 space-y-8">
-
-    <!-- Vinyl + Controls -->
-    <div class="flex items-center gap-10">
-      <div class="relative">
-        <div class="vinyl" id="vinyl">
-          <div class="vinyl-label">
-            <div class="vinyl-label-text">PINYL</div>
-          </div>
-          <div class="vinyl-hole"></div>
-        </div>
-        <div class="pulse-ring" id="pulseRing" style="display:none"></div>
-      </div>
-
-      <div class="flex-1 space-y-6">
-        <div class="flex gap-3">
-          <button class="btn btn-primary flex-1" id="btnStart" onclick="startStream()">▶ Start Stream</button>
-          <button class="btn btn-danger" id="btnStop" onclick="stopStream()" disabled>■ Stop</button>
-        </div>
-
-        <div>
-          <div class="label-text">Volume — <span id="volDisplay">50</span>%</div>
-          <input type="range" min="0" max="100" value="50" id="volumeSlider"
-            oninput="document.getElementById('volDisplay').textContent=this.value"
-            onchange="setVolume(this.value)" />
-        </div>
-
-        <div class="text-xs text-[#4a4a4a] leading-relaxed" id="statusDetail">
-          Pair speakers below, select an input, then press start.
-        </div>
-      </div>
-    </div>
-
-    <div class="groove-line"></div>
-
-    <!-- Input Selection -->
-    <div class="card p-6">
-      <div class="flex items-center justify-between mb-4">
-        <div class="section-title mb-0">Audio Input</div>
-        <button class="btn btn-ghost text-[10px] py-1 px-3" onclick="discoverInputs()">↻ Refresh</button>
-      </div>
-      <select id="inputSelect" onchange="selectInput(this.value)">
-        <option value="">Scanning for devices...</option>
-      </select>
-    </div>
-
-    <!-- Speaker Selection & Pairing -->
-    <div class="card p-6">
-      <div class="flex items-center justify-between mb-4">
-        <div class="section-title mb-0">AirPlay Speakers</div>
-        <button class="btn btn-ghost text-[10px] py-1 px-3" onclick="discoverSpeakers()">↻ Scan</button>
-      </div>
-      <div id="speakerList" class="space-y-2">
-        <div class="text-xs text-[#4a4a4a]">Scanning network...</div>
-      </div>
-      <div class="text-[10px] text-[#333] mt-3 tracking-wider">Click a speaker to select it. Pair is only needed for Apple TV devices.</div>
-    </div>
-
-    <!-- API Reference -->
-    <div class="card p-6">
-      <div class="section-title">Home Assistant / REST API</div>
-      <div class="space-y-2 text-[11px] text-[#4a4a4a] font-mono">
-        <div><span class="text-[#666]">GET</span>  <span class="text-[#888]">/api/status</span></div>
-        <div><span class="text-[#666]">POST</span> <span class="text-[#888]">/api/stream/start</span> <span class="text-[#444]">{"input_device","speakers":[],"volume"}</span></div>
-        <div><span class="text-[#666]">POST</span> <span class="text-[#888]">/api/stream/stop</span></div>
-        <div><span class="text-[#666]">POST</span> <span class="text-[#888]">/api/discover/speakers</span></div>
-        <div><span class="text-[#666]">POST</span> <span class="text-[#888]">/api/pair/start</span> <span class="text-[#444]">{"device_id","protocol":"raop"}</span></div>
-        <div><span class="text-[#666]">POST</span> <span class="text-[#888]">/api/pair/finish</span> <span class="text-[#444]">{"device_id","pin":"1234"}</span></div>
-        <div><span class="text-[#666]">POST</span> <span class="text-[#888]">/api/volume</span> <span class="text-[#444]">{"volume":0-100}</span></div>
-        <div class="pt-2 border-t border-[#1e1e1e]">
-          <span class="text-[#666]">POST</span> <span class="text-[#888]">/on</span> &nbsp;<span class="text-[#666]">POST</span> <span class="text-[#888]">/off</span>
-          <span class="text-[#444] ml-2">· HA toggles</span>
-        </div>
-      </div>
-    </div>
-
-  </main>
-
-  <script>
-    let selectedSpeakers = [];   // device IDs selected for streaming
-    let selectedInput = null;
-    let pairingDevice = null;    // device currently being paired
-
-    // ---------------------------------------------------------------------------
-    // Init
-    // ---------------------------------------------------------------------------
-    window.onload = () => {
-      discoverInputs();
-      discoverSpeakers();
-      pollStatus();
-      setInterval(pollStatus, 5000);
-    };
-
-    // ---------------------------------------------------------------------------
-    // Status polling
-    // ---------------------------------------------------------------------------
-    async function pollStatus() {
-      try {
-        const r = await fetch("/api/status");
-        const data = await r.json();
-        updateStatusUI(data);
-      } catch (e) {}
-    }
-
-    function updateStatusUI(data) {
-      const dot    = document.getElementById("statusDot");
-      const text   = document.getElementById("statusText");
-      const vinyl  = document.getElementById("vinyl");
-      const pulse  = document.getElementById("pulseRing");
-      const btnStart = document.getElementById("btnStart");
-      const btnStop  = document.getElementById("btnStop");
-      const detail   = document.getElementById("statusDetail");
-
-      if (data.error) {
-        dot.className = "status-dot error";
-        text.textContent = "Error";
-        detail.textContent = data.error;
-        detail.style.color = "#c0392b";
-        vinyl.classList.remove("playing");
-        pulse.style.display = "none";
-        btnStart.disabled = false;
-        btnStop.disabled = true;
-      } else if (data.streaming) {
-        dot.className = "status-dot on";
-        text.textContent = "Streaming";
-        vinyl.classList.add("playing");
-        pulse.style.display = "block";
-        btnStart.disabled = true;
-        btnStop.disabled = false;
-        detail.style.color = "";
-        detail.textContent = `Streaming to: ${data.active_speakers.length} speaker(s)`;
-      } else {
-        dot.className = "status-dot off";
-        text.textContent = "Idle";
-        vinyl.classList.remove("playing");
-        pulse.style.display = "none";
-        btnStart.disabled = false;
-        btnStop.disabled = true;
-        detail.style.color = "";
-        detail.textContent = "Select an input and speakers, then press start.";
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pinyl</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Playfair+Display:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <style>
+      :root {
+        --groove: #1a1a1a;
+        --wax: #111111;
+        --label: #c8a96e;
+        --label-dark: #8c6f3f;
+        --cream: #f0e6d0;
+        --dim: #4a4a4a;
+        --red: #c0392b;
+        --green: #27ae60;
+        --blue: #2980b9;
       }
 
-      if (data.volume !== undefined) {
-        document.getElementById("volumeSlider").value = data.volume;
-        document.getElementById("volDisplay").textContent = data.volume;
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
-    }
 
-    // ---------------------------------------------------------------------------
-    // Inputs
-    // ---------------------------------------------------------------------------
-    async function discoverInputs() {
-      const sel = document.getElementById("inputSelect");
-      sel.innerHTML = '<option value="">Scanning...</option>';
-      try {
-        const r = await fetch("/api/discover/inputs", { method: "POST" });
-        const data = await r.json();
-        sel.innerHTML = "";
-        if (!data.inputs.length) {
-          sel.innerHTML = '<option value="">No devices found</option>';
-        } else {
-          data.inputs.forEach(inp => {
-            const opt = document.createElement("option");
-            opt.value = inp.id;
-            opt.textContent = `${inp.name} (${inp.id})`;
-            sel.appendChild(opt);
-          });
-          selectedInput = data.inputs[0].id;
+      body {
+        background: var(--wax);
+        color: var(--cream);
+        font-family: "DM Mono", monospace;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
         }
-      } catch(e) {
-        sel.innerHTML = '<option value="">Error scanning</option>';
+        to {
+          transform: rotate(360deg);
+        }
       }
-    }
 
-    function selectInput(val) { selectedInput = val; }
-
-    // ---------------------------------------------------------------------------
-    // Speakers
-    // ---------------------------------------------------------------------------
-    async function discoverSpeakers() {
-      const list = document.getElementById("speakerList");
-      list.innerHTML = '<div class="text-xs text-[#4a4a4a]">Scanning network...</div>';
-      try {
-        const r = await fetch("/api/discover/speakers", { method: "POST" });
-        const data = await r.json();
-        renderSpeakers(data.speakers);
-      } catch(e) {
-        list.innerHTML = '<div class="text-xs text-[#c0392b]">Scan failed</div>';
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
-    }
 
-    function renderSpeakers(speakers) {
-      const list = document.getElementById("speakerList");
-      list.innerHTML = "";
-      if (!speakers.length) {
-        list.innerHTML = '<div class="text-xs text-[#4a4a4a]">No speakers found</div>';
-        return;
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(1);
+          opacity: 0.6;
+        }
+        100% {
+          transform: scale(1.4);
+          opacity: 0;
+        }
       }
-      speakers.forEach(sp => {
-        const wrap = document.createElement("div");
 
-        const isSelected = selectedSpeakers.includes(sp.id);
-        const cardClass = isSelected ? "speaker-card selected" : "speaker-card";
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
 
-        wrap.innerHTML = `
-          <div class="${cardClass}" id="card-${sp.id.replace(/:/g,'_')}">
+      .vinyl {
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle at 50% 50%,
+          #2a2a2a 0%,
+          #1a1a1a 20%,
+          #111 20.5%,
+          #1a1a1a 21%,
+          #111 30%,
+          #1a1a1a 30.5%,
+          #111 40%,
+          #1a1a1a 40.5%,
+          #111 50%,
+          #1a1a1a 50.5%,
+          #111 60%,
+          #1a1a1a 60.5%,
+          #0a0a0a 100%
+        );
+        box-shadow:
+          0 0 60px rgba(0, 0, 0, 0.8),
+          inset 0 0 20px rgba(0, 0, 0, 0.5);
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .vinyl.playing {
+        animation: spin 3s linear infinite;
+      }
+
+      .vinyl-label {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle at 40% 40%,
+          var(--label),
+          var(--label-dark)
+        );
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      }
+
+      .vinyl-label-text {
+        font-family: "Playfair Display", serif;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--wax);
+        letter-spacing: 0.05em;
+        text-align: center;
+        line-height: 1.1;
+      }
+
+      .vinyl-hole {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--wax);
+      }
+
+      .pulse-ring {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        border: 2px solid var(--label);
+        animation: pulse-ring 2s ease-out infinite;
+        pointer-events: none;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+      }
+      .status-dot.on {
+        background: var(--green);
+        box-shadow: 0 0 8px var(--green);
+      }
+      .status-dot.off {
+        background: var(--dim);
+      }
+      .status-dot.error {
+        background: var(--red);
+        box-shadow: 0 0 8px var(--red);
+      }
+
+      .card {
+        background: #1c1c1c;
+        border: 1px solid #2a2a2a;
+        border-radius: 2px;
+        animation: fadeIn 0.4s ease both;
+      }
+
+      .btn {
+        font-family: "DM Mono", monospace;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        border: none;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        padding: 10px 20px;
+        border-radius: 2px;
+      }
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: var(--label);
+        color: var(--wax);
+        font-weight: 500;
+      }
+      .btn-primary:hover:not(:disabled) {
+        background: #d4b87a;
+        transform: translateY(-1px);
+      }
+
+      .btn-danger {
+        background: transparent;
+        color: var(--red);
+        border: 1px solid var(--red);
+      }
+      .btn-danger:hover:not(:disabled) {
+        background: var(--red);
+        color: white;
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: var(--dim);
+        border: 1px solid #2a2a2a;
+      }
+      .btn-ghost:hover:not(:disabled) {
+        border-color: var(--label);
+        color: var(--label);
+      }
+
+      .btn-pair {
+        background: transparent;
+        color: var(--blue);
+        border: 1px solid var(--blue);
+        font-size: 10px;
+        padding: 4px 10px;
+      }
+      .btn-pair:hover:not(:disabled) {
+        background: var(--blue);
+        color: white;
+      }
+
+      .btn-paired {
+        background: transparent;
+        color: var(--green);
+        border: 1px solid var(--green);
+        font-size: 10px;
+        padding: 4px 10px;
+        cursor: default;
+      }
+
+      .speaker-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border: 1px solid #2a2a2a;
+        border-radius: 2px;
+        background: #161616;
+        transition: all 0.15s ease;
+        gap: 12px;
+      }
+      .speaker-card:hover {
+        border-color: #333;
+      }
+      .speaker-card.selected {
+        border-color: var(--label);
+        background: rgba(200, 169, 110, 0.06);
+      }
+      .speaker-card.active-stream {
+        border-color: var(--green);
+        background: rgba(39, 174, 96, 0.06);
+      }
+
+      .speaker-name {
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        flex: 1;
+      }
+
+      /* Pairing PIN modal */
+      .pin-row {
+        animation: slideDown 0.2s ease;
+        background: #141414;
+        border-top: 1px solid #2a2a2a;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .pin-input {
+        font-family: "DM Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.3em;
+        background: #1c1c1c;
+        border: 1px solid var(--blue);
+        color: var(--cream);
+        border-radius: 2px;
+        padding: 6px 10px;
+        width: 90px;
+        outline: none;
+        text-align: center;
+      }
+
+      .pin-hint {
+        font-size: 10px;
+        color: var(--dim);
+        letter-spacing: 0.05em;
+      }
+
+      select {
+        font-family: "DM Mono", monospace;
+        font-size: 12px;
+        background: #161616;
+        border: 1px solid #2a2a2a;
+        color: var(--cream);
+        border-radius: 2px;
+        padding: 8px 12px;
+        width: 100%;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      select:focus,
+      select:hover {
+        border-color: var(--label);
+      }
+
+      input[type="range"] {
+        padding: 0;
+        height: 4px;
+        appearance: none;
+        cursor: pointer;
+        accent-color: var(--label);
+        width: 100%;
+        background: transparent;
+      }
+
+      .label-text {
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--dim);
+        margin-bottom: 8px;
+      }
+
+      .mono-large {
+        font-family: "Playfair Display", serif;
+        font-size: 42px;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        color: var(--cream);
+      }
+
+      .section-title {
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--dim);
+        border-bottom: 1px solid #222;
+        padding-bottom: 10px;
+        margin-bottom: 16px;
+      }
+
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        padding: 12px 20px;
+        background: #222;
+        border: 1px solid var(--label);
+        border-radius: 2px;
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: all 0.3s ease;
+        pointer-events: none;
+        z-index: 100;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .toast.error {
+        border-color: var(--red);
+        color: var(--red);
+      }
+      .toast.success {
+        border-color: var(--green);
+        color: var(--green);
+      }
+
+      .groove-line {
+        height: 1px;
+        background: linear-gradient(
+          to right,
+          transparent,
+          #2a2a2a 20%,
+          #2a2a2a 80%,
+          transparent
+        );
+        margin: 24px 0;
+      }
+
+      ::-webkit-scrollbar {
+        width: 4px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--wax);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--dim);
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="toast" class="toast"></div>
+
+    <!-- Header -->
+    <header
+      class="px-8 pt-8 pb-6 flex items-center justify-between border-b border-[#1e1e1e]"
+    >
+      <div>
+        <div class="mono-large">Pinyl</div>
+        <div class="text-xs tracking-widest text-[#4a4a4a] mt-1">
+          Turntable → AirPlay
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="text-xs tracking-wider" id="statusText">Idle</span>
+      </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto px-8 py-8 space-y-8">
+      <!-- Vinyl + Controls -->
+      <div class="flex items-center gap-10">
+        <div class="relative">
+          <div class="vinyl" id="vinyl">
+            <div class="vinyl-label">
+              <div class="vinyl-label-text">PINYL</div>
+            </div>
+            <div class="vinyl-hole"></div>
+          </div>
+          <div class="pulse-ring" id="pulseRing" style="display: none"></div>
+        </div>
+
+        <div class="flex-1 space-y-6">
+          <div class="flex gap-3">
+            <button
+              class="btn btn-primary flex-1"
+              id="btnStart"
+              onclick="startStream()"
+            >
+              ▶ Start Stream
+            </button>
+            <button
+              class="btn btn-danger"
+              id="btnStop"
+              onclick="stopStream()"
+              disabled
+            >
+              ■ Stop
+            </button>
+          </div>
+
+          <div>
+            <div class="label-text">
+              Volume — <span id="volDisplay">50</span>%
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value="50"
+              id="volumeSlider"
+              oninput="
+                document.getElementById('volDisplay').textContent = this.value
+              "
+              onchange="setVolume(this.value)"
+            />
+          </div>
+
+          <div class="text-xs text-[#4a4a4a] leading-relaxed" id="statusDetail">
+            Pair speakers below, select an input, then press start.
+          </div>
+        </div>
+      </div>
+
+      <div class="groove-line"></div>
+
+      <!-- Input Selection -->
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="section-title mb-0">Audio Input</div>
+          <button
+            class="btn btn-ghost text-[10px] py-1 px-3"
+            onclick="discoverInputs()"
+          >
+            ↻ Refresh
+          </button>
+        </div>
+        <select id="inputSelect" onchange="selectInput(this.value)">
+          <option value="">Scanning for devices...</option>
+        </select>
+      </div>
+
+      <!-- Speaker Selection & Pairing -->
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="section-title mb-0">AirPlay Speakers</div>
+          <button
+            class="btn btn-ghost text-[10px] py-1 px-3"
+            onclick="discoverSpeakers()"
+          >
+            ↻ Scan
+          </button>
+        </div>
+        <div id="speakerList" class="space-y-2">
+          <div class="text-xs text-[#4a4a4a]">Scanning network...</div>
+        </div>
+        <div class="text-[10px] text-[#333] mt-3 tracking-wider">
+          Click a speaker to select it. Pair is only needed for Apple TV
+          devices.
+        </div>
+      </div>
+
+      <!-- API Reference -->
+      <div class="card p-6">
+        <div class="section-title">Home Assistant / REST API</div>
+        <div class="space-y-2 text-[11px] text-[#4a4a4a] font-mono">
+          <div>
+            <span class="text-[#666]">GET</span>
+            <span class="text-[#888]">/api/status</span>
+          </div>
+          <div>
+            <span class="text-[#666]">POST</span>
+            <span class="text-[#888]">/api/stream/start</span>
+            <span class="text-[#444]"
+              >{"input_device","speakers":[],"volume"}</span
+            >
+          </div>
+          <div>
+            <span class="text-[#666]">POST</span>
+            <span class="text-[#888]">/api/stream/stop</span>
+          </div>
+          <div>
+            <span class="text-[#666]">POST</span>
+            <span class="text-[#888]">/api/discover/speakers</span>
+          </div>
+          <div>
+            <span class="text-[#666]">POST</span>
+            <span class="text-[#888]">/api/pair/start</span>
+            <span class="text-[#444]">{"device_id","protocol":"raop"}</span>
+          </div>
+          <div>
+            <span class="text-[#666]">POST</span>
+            <span class="text-[#888]">/api/pair/finish</span>
+            <span class="text-[#444]">{"device_id","pin":"1234"}</span>
+          </div>
+          <div>
+            <span class="text-[#666]">POST</span>
+            <span class="text-[#888]">/api/volume</span>
+            <span class="text-[#444]">{"volume":0-100}</span>
+          </div>
+          <div class="pt-2 border-t border-[#1e1e1e]">
+            <span class="text-[#666]">POST</span>
+            <span class="text-[#888]">/on</span> &nbsp;<span class="text-[#666]"
+              >POST</span
+            >
+            <span class="text-[#888]">/off</span>
+            <span class="text-[#444] ml-2">· HA toggles</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      let selectedSpeakers = []; // device IDs selected for streaming
+      let selectedInput = null;
+      let pairingDevice = null; // device currently being paired
+
+      // ---------------------------------------------------------------------------
+      // Init
+      // ---------------------------------------------------------------------------
+      window.onload = () => {
+        discoverInputs();
+        discoverSpeakers();
+        pollStatus();
+        setInterval(pollStatus, 5000);
+      };
+
+      // ---------------------------------------------------------------------------
+      // Status polling
+      // ---------------------------------------------------------------------------
+      async function pollStatus() {
+        try {
+          const r = await fetch("/api/status");
+          const data = await r.json();
+          updateStatusUI(data);
+        } catch (e) {}
+      }
+
+      function updateStatusUI(data) {
+        const dot = document.getElementById("statusDot");
+        const text = document.getElementById("statusText");
+        const vinyl = document.getElementById("vinyl");
+        const pulse = document.getElementById("pulseRing");
+        const btnStart = document.getElementById("btnStart");
+        const btnStop = document.getElementById("btnStop");
+        const detail = document.getElementById("statusDetail");
+
+        if (data.error) {
+          dot.className = "status-dot error";
+          text.textContent = "Error";
+          detail.textContent = data.error;
+          detail.style.color = "#c0392b";
+          vinyl.classList.remove("playing");
+          pulse.style.display = "none";
+          btnStart.disabled = false;
+          btnStop.disabled = true;
+        } else if (data.streaming) {
+          dot.className = "status-dot on";
+          text.textContent = "Streaming";
+          vinyl.classList.add("playing");
+          pulse.style.display = "block";
+          btnStart.disabled = true;
+          btnStop.disabled = false;
+          detail.style.color = "";
+          detail.textContent = `Streaming to: ${data.active_speakers.length} speaker(s)`;
+        } else {
+          dot.className = "status-dot off";
+          text.textContent = "Idle";
+          vinyl.classList.remove("playing");
+          pulse.style.display = "none";
+          btnStart.disabled = false;
+          btnStop.disabled = true;
+          detail.style.color = "";
+          detail.textContent =
+            "Select an input and speakers, then press start.";
+        }
+
+        if (data.volume !== undefined) {
+          document.getElementById("volumeSlider").value = data.volume;
+          document.getElementById("volDisplay").textContent = data.volume;
+        }
+      }
+
+      // ---------------------------------------------------------------------------
+      // Inputs
+      // ---------------------------------------------------------------------------
+      async function discoverInputs() {
+        const sel = document.getElementById("inputSelect");
+        sel.innerHTML = '<option value="">Scanning...</option>';
+        try {
+          const r = await fetch("/api/discover/inputs", { method: "POST" });
+          const data = await r.json();
+          sel.innerHTML = "";
+          if (!data.inputs.length) {
+            sel.innerHTML = '<option value="">No devices found</option>';
+          } else {
+            data.inputs.forEach((inp) => {
+              const opt = document.createElement("option");
+              opt.value = inp.id;
+              opt.textContent = `${inp.name} (${inp.id})`;
+              sel.appendChild(opt);
+            });
+            selectedInput = data.inputs[0].id;
+          }
+        } catch (e) {
+          sel.innerHTML = '<option value="">Error scanning</option>';
+        }
+      }
+
+      function selectInput(val) {
+        selectedInput = val;
+      }
+
+      // ---------------------------------------------------------------------------
+      // Speakers
+      // ---------------------------------------------------------------------------
+      async function discoverSpeakers() {
+        const list = document.getElementById("speakerList");
+        list.innerHTML =
+          '<div class="text-xs text-[#4a4a4a]">Scanning network...</div>';
+        try {
+          const r = await fetch("/api/discover/speakers", { method: "POST" });
+          const data = await r.json();
+          renderSpeakers(data.speakers);
+        } catch (e) {
+          list.innerHTML =
+            '<div class="text-xs text-[#c0392b]">Scan failed</div>';
+        }
+      }
+
+      function renderSpeakers(speakers) {
+        const list = document.getElementById("speakerList");
+        list.innerHTML = "";
+        if (!speakers.length) {
+          list.innerHTML =
+            '<div class="text-xs text-[#4a4a4a]">No speakers found</div>';
+          return;
+        }
+        speakers.forEach((sp) => {
+          const wrap = document.createElement("div");
+
+          const isSelected = selectedSpeakers.includes(sp.id);
+          const cardClass = isSelected
+            ? "speaker-card selected"
+            : "speaker-card";
+
+          wrap.innerHTML = `
+          <div class="${cardClass}" id="card-${sp.id.replace(/:/g, "_")}">
             <div class="speaker-name" onclick="toggleSpeaker('${sp.id}', this)">${sp.name}</div>
             <div class="flex items-center gap-2">
-              ${sp.paired
-                ? `<button class="btn btn-paired">✓ Paired</button>`
-                : `<button class="btn btn-pair" onclick="startPairing('${sp.id}', '${sp.name}')">Pair</button>`
+              ${
+                sp.requires_pairing
+                  ? sp.paired
+                    ? `<button class="btn btn-paired">✓ Paired</button>`
+                    : `<button class="btn btn-pair" onclick="startPairing('${sp.id}', '${sp.name}')">Pair</button>`
+                  : ``
               }
             </div>
           </div>
-          <div class="pin-row" id="pin-${sp.id.replace(/:/g,'_')}" style="display:none">
+          <div class="pin-row" id="pin-${sp.id.replace(/:/g, "_")}" style="display:none">
             <span class="pin-hint">PIN from iPhone:</span>
             <input class="pin-input" type="text" maxlength="4" placeholder="----"
-              id="pinInput-${sp.id.replace(/:/g,'_')}"
+              id="pinInput-${sp.id.replace(/:/g, "_")}"
               onkeydown="if(event.key==='Enter') submitPin('${sp.id}')" />
             <button class="btn btn-primary text-[10px] py-1 px-3" onclick="submitPin('${sp.id}')">Submit</button>
             <button class="btn btn-ghost text-[10px] py-1 px-3" onclick="cancelPairing('${sp.id}')">Cancel</button>
           </div>
         `;
-        list.appendChild(wrap);
-      });
-    }
-
-    function toggleSpeaker(id, el) {
-      const card = el.closest(".speaker-card");
-      const idx = selectedSpeakers.indexOf(id);
-      if (idx >= 0) {
-        selectedSpeakers.splice(idx, 1);
-        card.classList.remove("selected");
-      } else {
-        selectedSpeakers.push(id);
-        card.classList.add("selected");
-      }
-    }
-
-    // ---------------------------------------------------------------------------
-    // Pairing
-    // ---------------------------------------------------------------------------
-    async function startPairing(deviceId, name) {
-      showToast(`Starting pairing with ${name}...`);
-      try {
-        const r = await fetch("/api/pair/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ device_id: deviceId, protocol: "raop" })
+          list.appendChild(wrap);
         });
-        const data = await r.json();
-        if (data.error) {
-          showToast(data.error, true);
+      }
+
+      function toggleSpeaker(id, el) {
+        const card = el.closest(".speaker-card");
+        const idx = selectedSpeakers.indexOf(id);
+        if (idx >= 0) {
+          selectedSpeakers.splice(idx, 1);
+          card.classList.remove("selected");
+        } else {
+          selectedSpeakers.push(id);
+          card.classList.add("selected");
+        }
+      }
+
+      // ---------------------------------------------------------------------------
+      // Pairing
+      // ---------------------------------------------------------------------------
+      async function startPairing(deviceId, name) {
+        showToast(`Starting pairing with ${name}...`);
+        try {
+          const r = await fetch("/api/pair/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_id: deviceId, protocol: "raop" }),
+          });
+          const data = await r.json();
+          if (data.error) {
+            showToast(data.error, true);
+            return;
+          }
+          // Show PIN entry row
+          const key = deviceId.replace(/:/g, "_");
+          document.getElementById(`pin-${key}`).style.display = "flex";
+          document.getElementById(`pinInput-${key}`).focus();
+          showToast(`Check your iPhone for a PIN`);
+          pairingDevice = deviceId;
+        } catch (e) {
+          showToast("Pairing failed to start", true);
+        }
+      }
+
+      async function submitPin(deviceId) {
+        const key = deviceId.replace(/:/g, "_");
+        const pin = document.getElementById(`pinInput-${key}`).value.trim();
+        if (pin.length !== 4) {
+          showToast("Enter the 4-digit PIN", true);
           return;
         }
-        // Show PIN entry row
-        const key = deviceId.replace(/:/g, '_');
-        document.getElementById(`pin-${key}`).style.display = "flex";
-        document.getElementById(`pinInput-${key}`).focus();
-        showToast(`Check your iPhone for a PIN`);
-        pairingDevice = deviceId;
-      } catch(e) {
-        showToast("Pairing failed to start", true);
-      }
-    }
-
-    async function submitPin(deviceId) {
-      const key = deviceId.replace(/:/g, '_');
-      const pin = document.getElementById(`pinInput-${key}`).value.trim();
-      if (pin.length !== 4) {
-        showToast("Enter the 4-digit PIN", true);
-        return;
-      }
-      try {
-        const r = await fetch("/api/pair/finish", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ device_id: deviceId, pin })
-        });
-        const data = await r.json();
-        if (data.error) {
-          showToast(data.error, true);
-          return;
+        try {
+          const r = await fetch("/api/pair/finish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_id: deviceId, pin }),
+          });
+          const data = await r.json();
+          if (data.error) {
+            showToast(data.error, true);
+            return;
+          }
+          showToast("Paired successfully!", false, true);
+          pairingDevice = null;
+          // Refresh speaker list to show paired state
+          await discoverSpeakers();
+        } catch (e) {
+          showToast("Failed to complete pairing", true);
         }
-        showToast("Paired successfully!", false, true);
+      }
+
+      function cancelPairing(deviceId) {
+        const key = deviceId.replace(/:/g, "_");
+        document.getElementById(`pin-${key}`).style.display = "none";
         pairingDevice = null;
-        // Refresh speaker list to show paired state
-        await discoverSpeakers();
-      } catch(e) {
-        showToast("Failed to complete pairing", true);
       }
-    }
 
-    function cancelPairing(deviceId) {
-      const key = deviceId.replace(/:/g, '_');
-      document.getElementById(`pin-${key}`).style.display = "none";
-      pairingDevice = null;
-    }
+      // ---------------------------------------------------------------------------
+      // Stream control
+      // ---------------------------------------------------------------------------
+      async function startStream() {
+        if (!selectedInput) {
+          showToast("No input selected", true);
+          return;
+        }
+        if (!selectedSpeakers.length) {
+          showToast("Select at least one speaker", true);
+          return;
+        }
 
-    // ---------------------------------------------------------------------------
-    // Stream control
-    // ---------------------------------------------------------------------------
-    async function startStream() {
-      if (!selectedInput) { showToast("No input selected", true); return; }
-      if (!selectedSpeakers.length) { showToast("Select at least one speaker", true); return; }
-
-      document.getElementById("btnStart").disabled = true;
-      try {
-        const r = await fetch("/api/stream/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input_device: selectedInput,
-            speakers: selectedSpeakers,
-            volume: parseInt(document.getElementById("volumeSlider").value),
-          })
-        });
-        const data = await r.json();
-        if (data.error) { showToast(data.error, true); document.getElementById("btnStart").disabled = false; }
-        else showToast("Stream started");
-        pollStatus();
-      } catch(e) {
-        showToast("Failed to start stream", true);
-        document.getElementById("btnStart").disabled = false;
+        document.getElementById("btnStart").disabled = true;
+        try {
+          const r = await fetch("/api/stream/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              input_device: selectedInput,
+              speakers: selectedSpeakers,
+              volume: parseInt(document.getElementById("volumeSlider").value),
+            }),
+          });
+          const data = await r.json();
+          if (data.error) {
+            showToast(data.error, true);
+            document.getElementById("btnStart").disabled = false;
+          } else showToast("Stream started");
+          pollStatus();
+        } catch (e) {
+          showToast("Failed to start stream", true);
+          document.getElementById("btnStart").disabled = false;
+        }
       }
-    }
 
-    async function stopStream() {
-      try {
-        await fetch("/api/stream/stop", { method: "POST" });
-        showToast("Stream stopped");
-        pollStatus();
-      } catch(e) {
-        showToast("Failed to stop", true);
+      async function stopStream() {
+        try {
+          await fetch("/api/stream/stop", { method: "POST" });
+          showToast("Stream stopped");
+          pollStatus();
+        } catch (e) {
+          showToast("Failed to stop", true);
+        }
       }
-    }
 
-    async function setVolume(val) {
-      try {
-        await fetch("/api/volume", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ volume: parseInt(val) })
-        });
-      } catch(e) {}
-    }
+      async function setVolume(val) {
+        try {
+          await fetch("/api/volume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ volume: parseInt(val) }),
+          });
+        } catch (e) {}
+      }
 
-    // ---------------------------------------------------------------------------
-    // Toast
-    // ---------------------------------------------------------------------------
-    let toastTimeout;
-    function showToast(msg, error=false, success=false) {
-      const t = document.getElementById("toast");
-      t.textContent = msg;
-      t.className = "toast show" + (error ? " error" : success ? " success" : "");
-      clearTimeout(toastTimeout);
-      toastTimeout = setTimeout(() => { t.className = "toast"; }, 3500);
-    }
-  </script>
-</body>
+      // ---------------------------------------------------------------------------
+      // Toast
+      // ---------------------------------------------------------------------------
+      let toastTimeout;
+      function showToast(msg, error = false, success = false) {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.className =
+          "toast show" + (error ? " error" : success ? " success" : "");
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          t.className = "toast";
+        }, 3500);
+      }
+    </script>
+  </body>
 </html>
