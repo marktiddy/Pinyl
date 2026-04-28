@@ -326,9 +326,10 @@
             : "speaker-card";
           const safeId = sp.id.replace(/:/g, "_");
 
+          const ready = !sp.requires_pairing || sp.paired;
           wrap.innerHTML = `
             <div class="${cardClass}" id="card-${safeId}">
-              <div class="speaker-name" onclick="toggleSpeaker('${sp.id}', this)">${sp.name}</div>
+              <div class="speaker-name" onclick="toggleSpeaker('${sp.id}', this, ${ready})">${sp.name}</div>
               <div style="display:flex;align-items:center;gap:8px;">
                 ${
                   sp.requires_pairing
@@ -352,7 +353,7 @@
         });
       }
 
-      function toggleSpeaker(id, el) {
+      function toggleSpeaker(id, el, ready) {
         const card = el.closest(".speaker-card");
         const idx = selectedSpeakers.indexOf(id);
         if (idx >= 0) {
@@ -361,6 +362,9 @@
         } else {
           selectedSpeakers.push(id);
           card.classList.add("selected");
+          if (ready && selectedInput) {
+            startStream();
+          }
         }
       }
 
