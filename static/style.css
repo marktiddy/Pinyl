@@ -464,6 +464,26 @@ input[type="range"] {
   color: var(--green);
 }
 
+/* ── Collapsible details ── */
+details summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+details summary::-webkit-details-marker {
+  display: none;
+}
+.details-chevron {
+  font-size: 14px;
+  color: var(--dim);
+  transition: transform 0.2s ease;
+}
+details[open] .details-chevron {
+  transform: rotate(180deg);
+}
+
 /* ── Groove divider ── */
 .groove-line {
   height: 1px;

@@ -6,6 +6,8 @@ via pyatv RAOP protocol.
 """
 
 import asyncio
+import fcntl
+import socket
 import subprocess
 import threading
 import logging
@@ -90,11 +92,30 @@ def discover_inputs():
 # AirPlay speaker discovery
 # ---------------------------------------------------------------------------
 
+def _local_ips():
+    ips = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ips.add(s.getsockname()[0])
+    except Exception:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            ips.add(info[4][0])
+    except Exception:
+        pass
+    return ips
+
+
 async def _discover_airplay():
     try:
+        local = _local_ips()
         devices = await pyatv.scan(loop, timeout=10)
         speakers = []
         for device in devices:
+            if str(device.address) in local:
+                continue
             services = [s.protocol for s in device.services]
             if pyatv.const.Protocol.RAOP in services:
                 raop_service = next(
@@ -222,11 +243,22 @@ async def _stream_to_speaker(device_id, input_device):
 
         # OS pipe → pyatv gets a plain blocking BufferedReader (BufferedIOBaseWrapper path),
         # not asyncio StreamReader, avoiding the run_coroutine_threadsafe deadlock.
-        # WAV: always built into ffmpeg, no external codec needed, header written immediately.
         read_fd, write_fd = os.pipe()
+
+        # Enlarge the pipe buffer to 1 MB to absorb brief network or scheduling stalls
+        # without forcing ffmpeg to block and drop captured frames.
+        try:
+            fcntl.fcntl(read_fd, fcntl.F_SETPIPE_SZ, 1024 * 1024)
+        except Exception:
+            pass
+
         process = subprocess.Popen(
             ["ffmpeg", "-y",
             "-f", "alsa", "-ac", "2", "-ar", "48000",
+            # Larger ALSA capture buffer reduces overruns when the CPU is briefly busy.
+            "-buffer_size", "131072",
+            # Larger input thread queue prevents frame drops under scheduling jitter.
+            "-thread_queue_size", "4096",
             "-i", input_device,
             "-af", "volume=4.0",
             "-ar", "48000",

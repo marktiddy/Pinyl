@@ -45,75 +45,10 @@
 
     <main style="max-width: 720px; margin: 0 auto; padding: 2rem 2rem 4rem">
       <div style="display: flex; flex-direction: column; gap: 2rem">
-        <!-- Vinyl + Controls -->
-        <div
-          style="
-            display: flex;
-            align-items: center;
-            gap: 2.5rem;
-            flex-wrap: wrap;
-          "
-        >
-          <div style="position: relative">
-            <div class="vinyl" id="vinyl">
-              <div class="vinyl-label">
-                <div class="vinyl-label-text">PINYL</div>
-              </div>
-            </div>
-          </div>
 
-          <div
-            style="
-              flex: 1;
-              min-width: 220px;
-              display: flex;
-              flex-direction: column;
-              gap: 1.5rem;
-            "
-          >
-            <div style="display: flex; gap: 0.75rem">
-              <button
-                class="btn btn-primary"
-                id="btnStart"
-                onclick="startStream()"
-                style="flex: 1"
-              >
-                ▶ Start Stream
-              </button>
-              <button
-                class="btn btn-danger"
-                id="btnStop"
-                onclick="stopStream()"
-                disabled
-              >
-                ■ Stop
-              </button>
-            </div>
-
-            <div>
-              <div class="label-text">
-                Volume — <span id="volDisplay">50</span>%
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value="50"
-                id="volumeSlider"
-                oninput="
-                  document.getElementById('volDisplay').textContent = this.value
-                "
-                onchange="setVolume(this.value)"
-              />
-            </div>
-
-            <div class="status-detail" id="statusDetail">
-              Pair speakers below, select an input, then press start.
-            </div>
-          </div>
+        <div class="status-detail" id="statusDetail">
+          Select an input and speakers below, then press start.
         </div>
-
-        <div class="groove-line"></div>
 
         <!-- Input Selection -->
         <div class="card" style="padding: 1.5rem">
@@ -182,10 +117,49 @@
           </p>
         </div>
 
+        <!-- Controls -->
+        <div style="display: flex; flex-direction: column; gap: 1.5rem">
+          <div>
+            <div class="label-text">
+              Volume — <span id="volDisplay">50</span>%
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value="50"
+              id="volumeSlider"
+              oninput="document.getElementById('volDisplay').textContent = this.value"
+              onchange="setVolume(this.value)"
+            />
+          </div>
+          <div style="display: flex; gap: 0.75rem">
+            <button
+              class="btn btn-primary"
+              id="btnStart"
+              onclick="startStream()"
+              style="flex: 1"
+            >
+              ▶ Start Stream
+            </button>
+            <button
+              class="btn btn-danger"
+              id="btnStop"
+              onclick="stopStream()"
+              disabled
+            >
+              ■ Stop
+            </button>
+          </div>
+        </div>
+
         <!-- API Reference -->
         <div class="card" style="padding: 1.5rem">
-          <div class="section-title">Home Assistant / REST API</div>
-          <div style="display: flex; flex-direction: column; gap: 8px">
+          <details>
+          <summary class="section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">
+            Home Assistant / REST API <span class="details-chevron">▾</span>
+          </summary>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 1rem">
             <div class="api-row">
               <span class="method">GET</span>&nbsp;
               <span class="endpoint">/api/status</span>
@@ -233,6 +207,7 @@
               <span class="body" style="margin-left: 8px">· HA toggles</span>
             </div>
           </div>
+          </details>
         </div>
       </div>
     </main>
@@ -260,7 +235,6 @@
       function updateStatusUI(data) {
         const dot = document.getElementById("statusDot");
         const text = document.getElementById("statusText");
-        const vinyl = document.getElementById("vinyl");
         const btnStart = document.getElementById("btnStart");
         const btnStop = document.getElementById("btnStop");
         const detail = document.getElementById("statusDetail");
@@ -270,13 +244,11 @@
           text.textContent = "Error";
           detail.textContent = data.error;
           detail.style.color = "var(--red)";
-          vinyl.classList.remove("playing");
           btnStart.disabled = false;
           btnStop.disabled = true;
         } else if (data.streaming) {
           dot.className = "status-dot on";
           text.textContent = "Streaming";
-          vinyl.classList.add("playing");
           btnStart.disabled = true;
           btnStop.disabled = false;
           detail.style.color = "";
@@ -284,7 +256,6 @@
         } else {
           dot.className = "status-dot off";
           text.textContent = "Idle";
-          vinyl.classList.remove("playing");
           btnStart.disabled = false;
           btnStop.disabled = true;
           detail.style.color = "";

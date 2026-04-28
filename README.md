@@ -167,6 +167,12 @@ Check the Pinyl logs (`sudo journalctl -u pinyl -f`) for the ffmpeg error output
 **No AirPlay speakers found**
 Ensure your Pi and speakers are on the same Wi-Fi network. Run `avahi-browse -a | grep AirPlay` to check.
 
+**Pi appears as an AirPlay speaker on the network**
+This is caused by `shairport-sync` running as a service. Pinyl doesn't need it — disable it:
+```bash
+sudo systemctl disable --now shairport-sync
+```
+
 **Service won't start**
 Check logs with `sudo journalctl -u pinyl -f`
 
