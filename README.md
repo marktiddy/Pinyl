@@ -59,15 +59,27 @@ You should see your device listed with a card number (e.g. `card 2`).
 
 ### 5. Install and start the service
 
-```bash
-# Edit the service file to match your username if not 'mark'
-nano pinyl.service
+The repo includes `pinyl.service`, a systemd unit that starts Pinyl automatically on boot.
 
-# Install
-sudo cp pinyl.service /etc/systemd/system/
+Open it and change the `User=` line to match your Pi username if it isn't `mark`:
+
+```bash
+nano /opt/pinyl/pinyl.service
+```
+
+Then install and enable it:
+
+```bash
+sudo cp /opt/pinyl/pinyl.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable pinyl
 sudo systemctl start pinyl
+```
+
+Confirm it's running:
+
+```bash
+sudo systemctl status pinyl
 ```
 
 ### 6. Open the web UI
@@ -79,6 +91,26 @@ http://<your-pi-ip>:5050
 ```
 
 e.g. `http://192.168.68.108:5050`
+
+---
+
+## Managing the Service
+
+| Task | Command |
+| ---- | ------- |
+| Check status | `sudo systemctl status pinyl` |
+| Start | `sudo systemctl start pinyl` |
+| Stop | `sudo systemctl stop pinyl` |
+| Restart | `sudo systemctl restart pinyl` |
+| View live logs | `sudo journalctl -u pinyl -f` |
+| Enable on boot | `sudo systemctl enable pinyl` |
+| Disable on boot | `sudo systemctl disable pinyl` |
+
+After editing `app.py` or any project file, restart the service for changes to take effect:
+
+```bash
+sudo systemctl restart pinyl
+```
 
 ---
 
