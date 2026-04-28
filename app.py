@@ -255,8 +255,6 @@ async def _stream_to_speaker(device_id, input_device):
         process = subprocess.Popen(
             ["ffmpeg", "-y",
             "-f", "alsa", "-ac", "2", "-ar", "48000",
-            # Larger ALSA capture buffer reduces overruns when the CPU is briefly busy.
-            "-buffer_size", "131072",
             # Larger input thread queue prevents frame drops under scheduling jitter.
             "-thread_queue_size", "4096",
             "-i", input_device,
