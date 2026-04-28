@@ -8,8 +8,8 @@ Pinyl captures audio from a USB audio interface, converts it, and streams it to 
 
 ## Hardware
 
-- Raspberry Pi (tested on Pi 5)
-- USB audio interface with analog input (tested with iRig Pro Duo)
+- [Raspberry Pi 5](https://geni.us/CvALl)
+- [Behringer UCA-202](https://geni.us/oZM6) USB audio interface
 - Turntable with built-in phono preamp (or a separate phono preamp)
 - RCA to 3.5mm or RCA to XLR cable depending on your interface
 - AirPlay 2 speaker (e.g. HomePod Mini)
@@ -96,14 +96,14 @@ e.g. `http://192.168.68.108:5050`
 
 ## Managing the Service
 
-| Task | Command |
-| ---- | ------- |
-| Check status | `sudo systemctl status pinyl` |
-| Start | `sudo systemctl start pinyl` |
-| Stop | `sudo systemctl stop pinyl` |
-| Restart | `sudo systemctl restart pinyl` |
-| View live logs | `sudo journalctl -u pinyl -f` |
-| Enable on boot | `sudo systemctl enable pinyl` |
+| Task            | Command                        |
+| --------------- | ------------------------------ |
+| Check status    | `sudo systemctl status pinyl`  |
+| Start           | `sudo systemctl start pinyl`   |
+| Stop            | `sudo systemctl stop pinyl`    |
+| Restart         | `sudo systemctl restart pinyl` |
+| View live logs  | `sudo journalctl -u pinyl -f`  |
+| Enable on boot  | `sudo systemctl enable pinyl`  |
 | Disable on boot | `sudo systemctl disable pinyl` |
 
 After editing `app.py` or any project file, restart the service for changes to take effect:
@@ -169,6 +169,7 @@ Ensure your Pi and speakers are on the same Wi-Fi network. Run `avahi-browse -a 
 
 **Pi appears as an AirPlay speaker on the network**
 This is caused by `shairport-sync` running as a service. Pinyl doesn't need it — disable it:
+
 ```bash
 sudo systemctl disable --now shairport-sync
 ```
@@ -184,6 +185,12 @@ Check logs with `sudo journalctl -u pinyl -f`
 - ffmpeg applies a 4× input gain boost to compensate for the low output level of phono preamps — adjust the `volume=4.0` filter in `app.py` if your input is too loud or too quiet
 - Volume control via the UI adjusts the AirPlay receiver volume; the ffmpeg gain is a separate fixed boost
 - Audio device IDs use the `plughw:X,0` format, which allows ALSA to handle sample-rate conversion automatically
+
+---
+
+## Support
+
+If you find this useful, [buy me a coffee](https://buymeacoffee.com/marktiddy) ☕
 
 ---
 
