@@ -4,6 +4,8 @@ Stream audio from your turntable (or any analog input) to AirPlay speakers inclu
 
 Pinyl captures audio from a USB audio interface, converts it, and streams it to one or more AirPlay 2 devices on your network. It includes a web UI for control and a REST API for Home Assistant integration.
 
+If you find this useful, [buy me a coffee](https://buymeacoffee.com/marktiddy) ☕
+
 ---
 
 ## Hardware
@@ -150,12 +152,6 @@ Device IDs are returned by `GET /api/status` or `POST /api/discover/speakers`.
 
 ---
 
-## Home Assistant Integration
-
-Copy the contents of `ha-configuration.yaml` into your Home Assistant `configuration.yaml`, then restart HA. A **Turntable** switch will appear which you can assign to any room/area.
-
----
-
 ## Troubleshooting
 
 **No audio devices found**
@@ -188,9 +184,59 @@ Check logs with `sudo journalctl -u pinyl -f`
 
 ---
 
-## Support
+## Home Assistant Integration
 
-If you find this useful, [buy me a coffee](https://buymeacoffee.com/marktiddy) ☕
+Copy the contents of `ha-configuration.yaml` into your Home Assistant `configuration.yaml`, then restart HA. A **Turntable** switch will appear which you can assign to any room/area.
+
+To start a stream to a specific speaker, add a `rest_command` entry:
+
+```yaml
+rest_command:
+  turntable_on:
+    url: "http://<your-pi-ip>:5050/api/stream/start"
+    method: POST
+    content_type: "application/json"
+    payload: '{"input_device": "plughw:2,0", "speakers": ["AA:BB:CC:DD:EE:FF"], "volume": 70}'
+
+  turntable_off:
+    url: "http://<your-pi-ip>:5050/api/stream/stop"
+    method: POST
+```
+
+Replace `AA:BB:CC:DD:EE:FF` with your speaker's device ID (found via `GET /api/status`). You can then call `service: rest_command.turntable_on` from any automation or script.
+
+---
+
+## Siri Shortcuts / Apple Home Integration
+
+You can control Pinyl from an iPhone or trigger it via an Apple Home automation using the **Get contents of URL** Shortcuts action, which makes HTTP requests.
+
+### Start streaming
+
+1. Open the **Shortcuts** app and create a new shortcut
+2. Add a **Get contents of URL** action
+3. Set the URL to `http://<your-pi-ip>:5050/api/stream/start`
+4. Tap the URL field to expand options:
+   - **Method:** POST
+   - **Request Body:** JSON
+   - Add the following key/value pairs:
+     - `input_device` → `plughw:2,0`
+     - `speakers` → `["AA:BB:CC:DD:EE:FF"]`
+     - `volume` → `70`
+5. Name the shortcut (e.g. *Turntable On*) and add it to your Home Screen or ask Siri
+
+### Stop streaming
+
+Create a second shortcut with the same setup but point the URL to `/api/stream/stop` with Method: POST and no body.
+
+### Use in an Apple Home automation
+
+1. Open the **Home** app → Automations → add a new automation
+2. Choose your trigger (e.g. a time of day, an NFC tag, or an accessory state)
+3. Tap **Convert to Shortcut**
+4. Add a **Get contents of URL** action as above
+
+This lets you say *"Hey Siri, Turntable On"* or trigger the stream automatically when you arrive home.
 
 ---
 
