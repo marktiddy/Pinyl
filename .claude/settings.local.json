@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python3 -c \"import pyatv.const; print\\([x for x in dir\\(pyatv.const\\) if 'Pairing' in x]\\)\")"
-    ]
-  }
-}
