@@ -81,7 +81,7 @@ def discover_inputs():
                 inputs.append({"id": device, "name": name, "card": card_num})
         state["inputs"] = inputs
         if inputs and not state["input_device"]:
-            state["input_device"] = inputs[0]["id"]
+            state["input_device"] = inputs[-1]["id"]
         logger.info(f"Discovered inputs: {inputs}")
     except Exception as e:
         logger.error(f"Error discovering inputs: {e}")
@@ -279,7 +279,10 @@ async def _stream_to_speaker(device_id, input_device):
         # Give ffmpeg a moment and fail fast if it exits immediately (bad device / codec).
         await asyncio.sleep(0.3)
         if process.poll() is not None:
-            raise Exception(f"ffmpeg exited immediately (code {process.returncode}) — see ffmpeg output above")
+            stderr_out = process.stderr.read().decode(errors="replace").strip()
+            for line in stderr_out.splitlines():
+                logger.warning("ffmpeg: %s", line)
+            raise Exception(f"ffmpeg exited immediately (code {process.returncode}): {stderr_out[-200:] if stderr_out else 'no output'}")
 
         await atv.stream.stream_file(reader)
 
@@ -347,6 +350,12 @@ def _stop_stream():
 # ---------------------------------------------------------------------------
 # Routes — Web UI
 # ---------------------------------------------------------------------------
+
+@app.after_request
+def force_http(response):
+    response.headers["Strict-Transport-Security"] = "max-age=0"
+    return response
+
 
 @app.route("/")
 def index():
@@ -424,6 +433,7 @@ def api_stream_start():
     if not speaker_ids:
         return jsonify({"error": "No speakers selected"}), 400
 
+    state["input_device"] = input_device
     t = threading.Thread(target=start_stream, args=(input_device, speaker_ids, volume))
     t.start()
 

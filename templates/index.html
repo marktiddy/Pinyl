@@ -45,7 +45,6 @@
 
     <main style="max-width: 720px; margin: 0 auto; padding: 2rem 2rem 4rem">
       <div style="display: flex; flex-direction: column; gap: 2rem">
-
         <div class="status-detail" id="statusDetail">
           Select an input and speakers below, then press start.
         </div>
@@ -129,7 +128,9 @@
               max="100"
               value="50"
               id="volumeSlider"
-              oninput="document.getElementById('volDisplay').textContent = this.value"
+              oninput="
+                document.getElementById('volDisplay').textContent = this.value
+              "
               onchange="setVolume(this.value)"
             />
           </div>
@@ -156,57 +157,69 @@
         <!-- API Reference -->
         <div class="card" style="padding: 1.5rem">
           <details>
-          <summary class="section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">
-            Home Assistant / REST API <span class="details-chevron">▾</span>
-          </summary>
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 1rem">
-            <div class="api-row">
-              <span class="method">GET</span>&nbsp;
-              <span class="endpoint">/api/status</span>
-            </div>
-            <div class="api-row">
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/api/stream/start</span>&nbsp;
-              <span class="body">{"input_device","speakers":[],"volume"}</span>
-            </div>
-            <div class="api-row">
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/api/stream/stop</span>
-            </div>
-            <div class="api-row">
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/api/discover/speakers</span>
-            </div>
-            <div class="api-row">
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/api/pair/start</span>&nbsp;
-              <span class="body">{"device_id","protocol":"raop"}</span>
-            </div>
-            <div class="api-row">
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/api/pair/finish</span>&nbsp;
-              <span class="body">{"device_id","pin":"1234"}</span>
-            </div>
-            <div class="api-row">
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/api/volume</span>&nbsp;
-              <span class="body">{"volume":0-100}</span>
-            </div>
+            <summary
+              class="section-title"
+              style="margin-bottom: 0; border-bottom: none; padding-bottom: 0"
+            >
+              Home Assistant / REST API <span class="details-chevron">▾</span>
+            </summary>
             <div
-              class="api-row"
               style="
-                border-top: 1px solid #1e1e1e;
-                padding-top: 10px;
-                margin-top: 4px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-top: 1rem;
               "
             >
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/on</span>&nbsp;&nbsp;
-              <span class="method">POST</span>&nbsp;
-              <span class="endpoint">/off</span>&nbsp;
-              <span class="body" style="margin-left: 8px">· HA toggles</span>
+              <div class="api-row">
+                <span class="method">GET</span>&nbsp;
+                <span class="endpoint">/api/status</span>
+              </div>
+              <div class="api-row">
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/api/stream/start</span>&nbsp;
+                <span class="body"
+                  >{"input_device","speakers":[],"volume"}</span
+                >
+              </div>
+              <div class="api-row">
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/api/stream/stop</span>
+              </div>
+              <div class="api-row">
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/api/discover/speakers</span>
+              </div>
+              <div class="api-row">
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/api/pair/start</span>&nbsp;
+                <span class="body">{"device_id","protocol":"raop"}</span>
+              </div>
+              <div class="api-row">
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/api/pair/finish</span>&nbsp;
+                <span class="body">{"device_id","pin":"1234"}</span>
+              </div>
+              <div class="api-row">
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/api/volume</span>&nbsp;
+                <span class="body">{"volume":0-100}</span>
+              </div>
+              <div
+                class="api-row"
+                style="
+                  border-top: 1px solid #1e1e1e;
+                  padding-top: 10px;
+                  margin-top: 4px;
+                "
+              >
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/on</span>&nbsp;&nbsp;
+                <span class="method">POST</span>&nbsp;
+                <span class="endpoint">/off</span>&nbsp;
+                <span class="body" style="margin-left: 8px">· HA toggles</span>
+              </div>
             </div>
-          </div>
           </details>
         </div>
       </div>
@@ -285,7 +298,8 @@
               opt.textContent = `${inp.name} (${inp.id})`;
               sel.appendChild(opt);
             });
-            selectedInput = data.inputs[0].id;
+            selectedInput = data.inputs[data.inputs.length - 1].id;
+            sel.value = selectedInput;
           }
         } catch (e) {
           sel.innerHTML = '<option value="">Error scanning</option>';
